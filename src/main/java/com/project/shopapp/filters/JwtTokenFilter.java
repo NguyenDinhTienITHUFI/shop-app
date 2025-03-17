@@ -29,45 +29,55 @@ public class JwtTokenFilter extends OncePerRequestFilter {
     private final UserDetailsService userDetailsService;
     private final JwtTokenUtil jwtTokenUtil;
     @Override
-    protected void doFilterInternal
-            (@NonNull HttpServletRequest request,
-             @NonNull HttpServletResponse response,
-             @NonNull FilterChain filterChain) throws ServletException, IOException {
-            if (isBypassToken(request)){
-                filterChain.doFilter(request,response);
+    protected void doFilterInternal(@NonNull  HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain)
+            throws ServletException, IOException {
+        try {
+            if(isBypassToken(request)) {
+                filterChain.doFilter(request, response); //enable bypass
                 return;
             }
-            final String authHeader=request.getHeader("Authorization");
-            if(authHeader!= null && authHeader.startsWith("Bearer ")){
-                final String token=authHeader.substring(7);
-                final String phoneNumber=jwtTokenUtil.extractPhoneNumber(token);
-                if(phoneNumber !=null && SecurityContextHolder.getContext().getAuthentication()==null){
-                   UserDetails userDetails= userDetailsService.loadUserByUsername(phoneNumber);
-                   if(jwtTokenUtil.validateToken(token,userDetails)){
-                       UsernamePasswordAuthenticationToken authenticationToken=
-                               new UsernamePasswordAuthenticationToken(
-                                       userDetails,
-                                       null,
-                                       userDetails.getAuthorities()
-                               );
-                       authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                       SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-                   }
+            final String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+                return;
+            }
+            final String token = authHeader.substring(7);
+            final String phoneNumber = jwtTokenUtil.extractPhoneNumber(token);
+            if (phoneNumber != null
+                    && SecurityContextHolder.getContext().getAuthentication() == null) {
+                User userDetails = (User) userDetailsService.loadUserByUsername(phoneNumber);
+                if(jwtTokenUtil.validateToken(token, userDetails)) {
+                    UsernamePasswordAuthenticationToken authenticationToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities()
+                            );
+                    authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
                 }
             }
-            filterChain.doFilter(request,response);
+            filterChain.doFilter(request, response); //enable bypass
+        }catch (Exception e) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+        }
+
     }
-    private boolean isBypassToken(@NonNull HttpServletRequest request){
-        final List<Pair<String,String>> bypassTokens= Arrays.asList(
-                Pair.of(String.format("%s/products",apiPrefix),"GET"),
-                Pair.of(String.format("%s/categories",apiPrefix),"GET"),
-                Pair.of(String.format("%s/users/login",apiPrefix),"POST"),
-                Pair.of(String.format("%s/users/register",apiPrefix),"POST")
+    private boolean isBypassToken(@NonNull  HttpServletRequest request) {
+
+        final List<Pair<String, String>> bypassTokens = Arrays.asList(
+                Pair.of(String.format("%s/roles", apiPrefix), "GET"),
+                Pair.of(String.format("%s/products", apiPrefix), "GET"),
+                Pair.of(String.format("%s/categories", apiPrefix), "GET"),
+                Pair.of(String.format("%s/users/register", apiPrefix), "POST"),
+                Pair.of(String.format("%s/users/login", apiPrefix), "POST")
         );
-        for (Pair<String,String> bypassToken:bypassTokens){
-            if(request.getServletPath().contains(bypassToken.getLeft())&&
-                    request.getMethod().equals(bypassToken.getRight())){
-                return  true;
+        for(Pair<String, String> bypassToken: bypassTokens) {
+            if (request.getServletPath().contains(bypassToken.getLeft()) &&
+                    request.getMethod().equals(bypassToken.getRight())) {
+                return true;
             }
         }
         return false;
